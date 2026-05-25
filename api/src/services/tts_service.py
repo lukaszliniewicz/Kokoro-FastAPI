@@ -13,6 +13,12 @@ from kokoro import KPipeline
 from loguru import logger
 
 from ..core.config import settings
+from ..core.model_assets import (
+    canonicalize_voice_expression,
+    ensure_assets_for_request,
+    resolve_model_file_for_request,
+    resolve_pipeline_lang_code,
+)
 from ..inference.base import AudioChunk
 from ..inference.kokoro_v1 import KokoroV1
 from ..inference.model_manager import get_manager as get_model_manager
@@ -189,6 +195,8 @@ class TTSService:
             RuntimeError: If voice not found
         """
         try:
+            voice = canonicalize_voice_expression(voice)
+
             # Split the voice on + and - and ensure that they get added to the list eg: hi+bob = ["hi","+","bob"]
             split_voice = re.split(r"([-+])", voice)
 
@@ -266,12 +274,19 @@ class TTSService:
         volume_multiplier: Optional[float] = 1.0,
         normalization_options: Optional[NormalizationOptions] = NormalizationOptions(),
         return_timestamps: Optional[bool] = False,
+        model: Optional[str] = None,
     ) -> AsyncGenerator[AudioChunk, None]:
         """Generate and stream audio chunks."""
         stream_normalizer = AudioNormalizer()
         chunk_index = 0
         current_offset = 0.0
         try:
+            voice = canonicalize_voice_expression(voice)
+            pipeline_lang_code = resolve_pipeline_lang_code(voice, lang_code)
+            await ensure_assets_for_request(voice, pipeline_lang_code, model)
+            model_path = resolve_model_file_for_request(voice, pipeline_lang_code, model)
+            await self.model_manager.ensure_model_loaded(model_path)
+
             # Get backend
             backend = self.model_manager.get_backend()
 
@@ -279,10 +294,8 @@ class TTSService:
             voice_name, voice_path = await self._get_voices_path(voice)
             logger.debug(f"Using voice path: {voice_path}")
 
-            # Use provided lang_code or determine from voice name
-            pipeline_lang_code = lang_code if lang_code else voice[:1].lower()
             logger.info(
-                f"Using lang_code '{pipeline_lang_code}' for voice '{voice_name}' in audio stream"
+                f"Using model '{model_path}' and lang_code '{pipeline_lang_code}' for voice '{voice_name}' in audio stream"
             )
 
             # Process text in chunks with smart splitting, handling pause tags
@@ -326,6 +339,8 @@ class TTSService:
                 elif tokens or chunk_text.strip():  # Process if there are tokens OR non-whitespace text
                     # --- Handle Text Chunk ---
                     try:
+                        await self.model_manager.ensure_model_loaded(model_path)
+
                         # Process audio for chunk
                         async for chunk_data in self._process_chunk(
                             chunk_text,  # Pass text for Kokoro V1
@@ -373,6 +388,8 @@ class TTSService:
             # Only finalize if we successfully processed at least one chunk
             if chunk_index > 0:
                 try:
+                    await self.model_manager.ensure_model_loaded(model_path)
+
                     # Empty tokens list to finalize audio
                     async for chunk_data in self._process_chunk(
                         "",  # Empty text
@@ -407,6 +424,7 @@ class TTSService:
         volume_multiplier: Optional[float] = 1.0,
         normalization_options: Optional[NormalizationOptions] = NormalizationOptions(),
         lang_code: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> AudioChunk:
         """Generate complete audio for text using streaming internally."""
         audio_data_chunks = []
@@ -422,6 +440,7 @@ class TTSService:
                 return_timestamps=return_timestamps,
                 lang_code=lang_code,
                 output_format=None,
+                model=model,
             ):
                 if len(audio_stream_data.audio) > 0:
                     audio_data_chunks.append(audio_stream_data)
@@ -451,6 +470,7 @@ class TTSService:
         voice: str,
         speed: float = 1.0,
         lang_code: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> Tuple[np.ndarray, float]:
         """Generate audio directly from phonemes.
 
@@ -465,6 +485,12 @@ class TTSService:
         """
         start_time = time.time()
         try:
+            voice = canonicalize_voice_expression(voice)
+            pipeline_lang_code = resolve_pipeline_lang_code(voice, lang_code)
+            await ensure_assets_for_request(voice, pipeline_lang_code, model)
+            model_path = resolve_model_file_for_request(voice, pipeline_lang_code, model)
+            await self.model_manager.ensure_model_loaded(model_path)
+
             # Get backend and voice path
             backend = self.model_manager.get_backend()
             voice_name, voice_path = await self._get_voices_path(voice)
@@ -472,10 +498,8 @@ class TTSService:
             if isinstance(backend, KokoroV1):
                 # For Kokoro V1, use generate_from_tokens with raw phonemes
                 result = None
-                # Use provided lang_code or determine from voice name
-                pipeline_lang_code = lang_code if lang_code else voice[:1].lower()
                 logger.info(
-                    f"Using lang_code '{pipeline_lang_code}' for voice '{voice_name}' in phoneme pipeline"
+                    f"Using model '{model_path}' and lang_code '{pipeline_lang_code}' for voice '{voice_name}' in phoneme pipeline"
                 )
 
                 try:

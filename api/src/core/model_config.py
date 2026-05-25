@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 class KokoroV1Config(BaseModel):
     """Kokoro V1 configuration."""
 
-    languages: list[str] = ["en"]
+    languages: list[str] = ["en", "de"]
 
     class Config:
         frozen = True

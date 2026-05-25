@@ -92,6 +92,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PHONEMIZER_ESPEAK_PATH=/usr/bin \
     PHONEMIZER_ESPEAK_DATA=/usr/share/espeak-ng-data \
     ESPEAK_DATA_PATH=/usr/share/espeak-ng-data \
+    DOWNLOAD_EXTERNAL_MODELS=false \
+    DOWNLOAD_EXTERNAL_PROFILE_IDS="" \
+    DOWNLOAD_GERMAN_MARTIN=false \
     DEVICE="gpu"
 
 # Run FastAPI server

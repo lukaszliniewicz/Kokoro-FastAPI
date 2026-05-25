@@ -35,7 +35,13 @@ def mock_openai_mappings():
     with patch(
         "api.src.routers.openai_compatible._openai_mappings",
         {
-            "models": {"tts-1": "kokoro-v1_0", "tts-1-hd": "kokoro-v1_0"},
+            "models": {
+                "tts-1": "kokoro-v1_0",
+                "tts-1-hd": "kokoro-v1_0",
+                "kokoro": "kokoro-v1_0",
+                "gpt-4o-mini-tts": "kokoro-v1_0",
+                "kikiri-german-martin": "kikiri_german_martin_ep10",
+            },
             "voices": {"alloy": "am_adam", "nova": "bf_isabella"},
         },
     ):
@@ -84,6 +90,7 @@ def test_list_models(mock_openai_mappings):
     assert "tts-1-hd" in model_ids
     assert "kokoro" in model_ids
     assert "gpt-4o-mini-tts" in model_ids
+    assert "kikiri-german-martin" in model_ids
 
     # Verify model format
     for model in data["data"]:

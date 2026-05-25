@@ -2,7 +2,7 @@
 
 import re
 import time
-from typing import AsyncGenerator, Dict, List, Tuple, Optional
+from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -122,7 +122,7 @@ def get_sentence_info(
         full = full.strip()
         if not full:  # Skip if empty after stripping
             continue
-        tokens = process_text_chunk(full)
+        tokens = process_text_chunk(full, language=lang_code)
         results.append((full, tokens, len(tokens)))
     return results
 
@@ -217,7 +217,7 @@ async def smart_split(
 
                         full_clause = clause + comma
 
-                        tokens = process_text_chunk(full_clause)
+                        tokens = process_text_chunk(full_clause, language=lang_code)
                         count = len(tokens)
 
                         # If adding clause keeps us under max and not optimal yet

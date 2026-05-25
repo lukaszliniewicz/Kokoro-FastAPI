@@ -1,11 +1,17 @@
 """Kokoro V1 model management."""
 
+import asyncio
 from typing import Optional
 
 from loguru import logger
 
 from ..core import paths
 from ..core.config import settings
+from ..core.model_assets import (
+    ensure_assets_for_request,
+    resolve_model_file_for_request,
+    resolve_pipeline_lang_code,
+)
 from ..core.model_config import ModelConfig, model_config
 from .base import BaseModelBackend
 from .kokoro_v1 import KokoroV1
@@ -26,6 +32,16 @@ class ModelManager:
         self._config = config or model_config
         self._backend: Optional[KokoroV1] = None  # Explicitly type as KokoroV1
         self._device: Optional[str] = None
+        self._loaded_model_path: Optional[str] = None
+        self._model_lock: Optional[asyncio.Lock] = None
+        self._model_lock_loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def _get_model_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._model_lock is None or self._model_lock_loop is not loop:
+            self._model_lock = asyncio.Lock()
+            self._model_lock_loop = loop
+        return self._model_lock
 
     def _determine_device(self) -> str:
         """Determine device based on settings."""
@@ -61,9 +77,21 @@ class ModelManager:
             # Initialize backend
             await self.initialize()
 
-            # Load model
-            model_path = self._config.pytorch_kokoro_v1_file
-            await self.load_model(model_path)
+            # Resolve and load startup model based on configured default voice/lang
+            startup_lang_code = resolve_pipeline_lang_code(
+                settings.default_voice, settings.default_voice_code
+            )
+            model_path = resolve_model_file_for_request(
+                settings.default_voice,
+                startup_lang_code,
+                None,
+            )
+            await ensure_assets_for_request(
+                settings.default_voice,
+                startup_lang_code,
+                None,
+            )
+            await self.ensure_model_loaded(model_path)
 
             # Use paths module to get voice path
             try:
@@ -75,7 +103,11 @@ class ModelManager:
                 # Use default voice name for warmup
                 voice_name = settings.default_voice
                 logger.debug(f"Using default voice '{voice_name}' for warmup")
-                async for _ in self.generate(warmup_text, (voice_name, voice_path)):
+                async for _ in self.generate(
+                    warmup_text,
+                    (voice_name, voice_path),
+                    lang_code=startup_lang_code,
+                ):
                     pass
             except Exception as e:
                 raise RuntimeError(f"Failed to get default voice: {e}")
@@ -125,10 +157,30 @@ Model files not found! You need to download the Kokoro V1 model:
 
         try:
             await self._backend.load_model(path)
+            self._loaded_model_path = path
         except FileNotFoundError as e:
             raise e
         except Exception as e:
             raise RuntimeError(f"Failed to load model: {e}")
+
+    async def ensure_model_loaded(self, path: str) -> None:
+        """Ensure the requested model is loaded and active."""
+        async with self._get_model_lock():
+            if not self._backend:
+                await self.initialize()
+
+            if (
+                self._backend
+                and self._backend.is_loaded
+                and self._loaded_model_path == path
+            ):
+                return
+
+            if self._backend and self._backend.is_loaded:
+                logger.info(f"Switching active model from '{self._loaded_model_path}' to '{path}'")
+                self._backend.unload()
+
+            await self.load_model(path)
 
     async def generate(self, *args, **kwargs):
         """Generate audio using initialized backend.
@@ -136,16 +188,17 @@ Model files not found! You need to download the Kokoro V1 model:
         Raises:
             RuntimeError: If generation fails
         """
-        if not self._backend:
-            raise RuntimeError("Backend not initialized")
+        async with self._get_model_lock():
+            if not self._backend:
+                raise RuntimeError("Backend not initialized")
 
-        try:
-            async for chunk in self._backend.generate(*args, **kwargs):
-                if settings.default_volume_multiplier != 1.0:
-                    chunk.audio *= settings.default_volume_multiplier
-                yield chunk
-        except Exception as e:
-            raise RuntimeError(f"Generation failed: {e}")
+            try:
+                async for chunk in self._backend.generate(*args, **kwargs):
+                    if settings.default_volume_multiplier != 1.0:
+                        chunk.audio *= settings.default_volume_multiplier
+                    yield chunk
+            except Exception as e:
+                raise RuntimeError(f"Generation failed: {e}")
 
     def unload_all(self) -> None:
         """Unload model and free resources."""

@@ -21,6 +21,11 @@ services:
       - PYTHONUNBUFFERED=1
       - API_LOG_LEVEL=DEBUG
       - DOWNLOAD_MODEL=true
+      - DOWNLOAD_EXTERNAL_MODELS=false
+      - DOWNLOAD_EXTERNAL_PROFILE_IDS=
+      - DOWNLOAD_GERMAN_MARTIN=false
+      - ENABLE_GERMAN_MARTIN_SUPPORT=true
+      - AUTO_DOWNLOAD_MODEL_ASSETS=true
     deploy:
       resources:
         reservations:

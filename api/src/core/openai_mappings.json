@@ -3,7 +3,8 @@
         "tts-1": "kokoro-v1_0",
         "tts-1-hd": "kokoro-v1_0",
         "kokoro": "kokoro-v1_0",
-        "gpt-4o-mini-tts": "kokoro-v1_0"
+        "gpt-4o-mini-tts": "kokoro-v1_0",
+        "kikiri-german-martin": "kikiri_german_martin_ep10"
     },
     "voices": {
         "alloy": "am_v0adam",

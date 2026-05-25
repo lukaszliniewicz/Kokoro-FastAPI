@@ -12,11 +12,25 @@ export VOICES_DIR=src/voices/v1_0
 export WEB_PLAYER_PATH=$PROJECT_ROOT/web
 # Set the espeak-ng data path to your location
 export ESPEAK_DATA_PATH=/usr/lib/x86_64-linux-gnu/espeak-ng-data
+export DOWNLOAD_EXTERNAL_MODELS=${DOWNLOAD_EXTERNAL_MODELS:-false}
+export DOWNLOAD_EXTERNAL_PROFILE_IDS=${DOWNLOAD_EXTERNAL_PROFILE_IDS:-}
+export DOWNLOAD_GERMAN_MARTIN=${DOWNLOAD_GERMAN_MARTIN:-false}
 
 # Run FastAPI with CPU extras using uv run
 # Note: espeak may still require manual installation,
 uv pip install -e ".[cpu]"
-uv run --no-sync python docker/scripts/download_model.py --output api/src/models/v1_0
+DOWNLOAD_ARGS=(--output api/src/models/v1_0)
+if [ "$DOWNLOAD_EXTERNAL_MODELS" = "true" ]; then
+    DOWNLOAD_ARGS+=(--with-external-profiles)
+fi
+if [ -n "$DOWNLOAD_EXTERNAL_PROFILE_IDS" ]; then
+    DOWNLOAD_ARGS+=(--with-external-profiles)
+    DOWNLOAD_ARGS+=(--external-profile-ids "$DOWNLOAD_EXTERNAL_PROFILE_IDS")
+fi
+if [ "$DOWNLOAD_GERMAN_MARTIN" = "true" ]; then
+    DOWNLOAD_ARGS+=(--with-german-martin)
+fi
+uv run --no-sync python docker/scripts/download_model.py "${DOWNLOAD_ARGS[@]}"
 
 # Apply the misaki patch to fix possible EspeakWrapper issue in older versions
 # echo "Applying misaki patch..."

@@ -2,6 +2,57 @@
   <img src="githubbanner.png" alt="Kokoro TTS Banner">
 </p>
 
+## Fork Additions (Kikiri German Martin)
+
+This fork keeps FastKoko as a drop-in OpenAI-compatible TTS API, and extends it to support both:
+- the regular Kokoro v1.0 model + voice packs, and
+- the Kikiri fine-tuned German Martin model + `martin` voice
+
+in the same running API service.
+
+### Intent
+- Keep upstream behavior for existing clients (`tts-1`, `tts-1-hd`, `kokoro`, `gpt-4o-mini-tts`).
+- Add German fine-tuned model/voice support without splitting into a second service.
+- Provide a practical base for future fine-tuned model/voice additions via config + mapping updates.
+
+### What Is Added
+- Dynamic per-request model routing in the TTS pipeline.
+- Generic external profile support (model repo/file/subdir, model IDs, voice files, aliases, lang hints).
+- External profile assets with lazy Hugging Face download (Martin profile included by default via legacy settings).
+- OpenAI model list auto-extends with profile model IDs (plus built-in mappings).
+- German language handling (`de` / `d`) in text processing and UI language selection.
+- Semidark Kokoro/Misaki forks pinned for German support.
+
+### Startup / Docker Notes In This Fork
+- Startup scripts still prepare the base model at `api/src/models/v1_0`.
+- Optional prefetch for external profiles is available via:
+  - `DOWNLOAD_EXTERNAL_MODELS=true` (all enabled profiles)
+  - `DOWNLOAD_EXTERNAL_PROFILE_IDS=profile-a,profile-b` (subset)
+  - `DOWNLOAD_GERMAN_MARTIN=true` (legacy shortcut, still supported)
+  - supported in `start-cpu.sh`, `start-gpu.sh`, `start-gpu_mac.sh`, `start-cpu.ps1`, `start-gpu.ps1`, `start-cpu-pixi.bat`, and Docker entrypoint flow.
+- Docker compose examples in `docker/cpu/docker-compose.yml`, `docker/gpu/docker-compose.yml`, and `docker/rocm/docker-compose.yml` include these env vars (set to `false`/empty by default).
+- If not prefetched, profile assets still auto-download on first matching request when `AUTO_DOWNLOAD_MODEL_ASSETS=true` (default).
+
+### Adding More Fine-Tuned Models
+- Runtime routing profiles are configured with `EXTERNAL_MODEL_PROFILES` (JSON list).
+- Each profile can define model trigger IDs, language hints, local voice names, alias mapping, and HF source files.
+- Existing German Martin legacy fields remain supported for backward compatibility.
+- Full guide and templates: `docs/external-profiles.md`.
+
+```bash
+EXTERNAL_MODEL_PROFILES='[
+  {
+    "profile_id": "my-finetune",
+    "model_repo_id": "org/my-finetune-repo",
+    "model_filename": "my_finetune.pth",
+    "model_subdir": "my_finetune",
+    "model_ids": ["my-finetune"],
+    "lang_codes": ["en-us", "a"],
+    "voice_files": {"my_voice": "voices/my_voice.pt"}
+  }
+]'
+```
+
 # <sub><sub>_`FastKoko`_ </sub></sub> 
 
   [![Changelog](https://img.shields.io/badge/changelog-white)](./CHANGELOG.md) [![Tests](https://img.shields.io/badge/tests-81-darkgreen)]()

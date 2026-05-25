@@ -85,6 +85,9 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     USE_GPU=true \
     DOWNLOAD_MODEL=true \
+    DOWNLOAD_EXTERNAL_MODELS=false \
+    DOWNLOAD_EXTERNAL_PROFILE_IDS="" \
+    DOWNLOAD_GERMAN_MARTIN=false \
     DEVICE="gpu"
 
 # Run FastAPI server through entrypoint.sh

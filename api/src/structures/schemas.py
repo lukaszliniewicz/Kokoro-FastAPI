@@ -78,7 +78,7 @@ class OpenAISpeechRequest(BaseModel):
 
     model: str = Field(
         default="kokoro",
-        description="The model to use for generation. Supported models: tts-1, tts-1-hd, kokoro",
+        description="The model to use for generation. See /v1/models for currently available IDs.",
     )
     input: str = Field(..., description="The text to generate audio for")
     voice: str = Field(
@@ -128,7 +128,7 @@ class CaptionedSpeechRequest(BaseModel):
 
     model: str = Field(
         default="kokoro",
-        description="The model to use for generation. Supported models: tts-1, tts-1-hd, kokoro",
+        description="The model to use for generation. See /v1/models for currently available IDs.",
     )
     input: str = Field(..., description="The text to generate audio for")
     voice: str = Field(

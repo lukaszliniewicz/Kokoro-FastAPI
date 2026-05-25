@@ -65,6 +65,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+DOWNLOAD_GERMAN_MARTIN=${DOWNLOAD_GERMAN_MARTIN:-false}
+DOWNLOAD_EXTERNAL_MODELS=${DOWNLOAD_EXTERNAL_MODELS:-false}
+DOWNLOAD_EXTERNAL_PROFILE_IDS=${DOWNLOAD_EXTERNAL_PROFILE_IDS:-}
+
 MODEL_DIR="$PROJECT_ROOT/api/src/models/v1_0"
 echo "Model directory: $MODEL_DIR"
 mkdir -p "$MODEL_DIR"
@@ -78,30 +82,54 @@ CONFIG_PATH="$MODEL_DIR/$CONFIG_FILE"
 # Check if files already exist and are valid
 if verify_files "$MODEL_PATH" "$CONFIG_PATH"; then
     echo "Model files already exist and are valid"
-    exit 0
-fi
-
-# Define URLs
-BASE_URL="https://github.com/remsky/Kokoro-FastAPI/releases/download/v0.1.4"
-MODEL_URL="$BASE_URL/$MODEL_FILE"
-CONFIG_URL="$BASE_URL/$CONFIG_FILE"
-
-# Download files
-success=true
-
-if ! download_file "$MODEL_URL" "$MODEL_PATH"; then
-    success=false
-fi
-
-if ! download_file "$CONFIG_URL" "$CONFIG_PATH"; then
-    success=false
-fi
-
-# Verify downloaded files
-if [ "$success" = true ] && verify_files "$MODEL_PATH" "$CONFIG_PATH"; then
-    echo "✓ Model files prepared in $MODEL_DIR"
-    exit 0
 else
-    echo "Failed to download or verify model files" >&2
-    exit 1
+    # Define URLs
+    BASE_URL="https://github.com/remsky/Kokoro-FastAPI/releases/download/v0.1.4"
+    MODEL_URL="$BASE_URL/$MODEL_FILE"
+    CONFIG_URL="$BASE_URL/$CONFIG_FILE"
+
+    # Download files
+    success=true
+
+    if ! download_file "$MODEL_URL" "$MODEL_PATH"; then
+        success=false
+    fi
+
+    if ! download_file "$CONFIG_URL" "$CONFIG_PATH"; then
+        success=false
+    fi
+
+    # Verify downloaded files
+    if [ "$success" = true ] && verify_files "$MODEL_PATH" "$CONFIG_PATH"; then
+        echo "✓ Base model files prepared in $MODEL_DIR"
+    else
+        echo "Failed to download or verify model files" >&2
+        exit 1
+    fi
 fi
+
+DOWNLOAD_EXTRA_ARGS=()
+
+if [ "$DOWNLOAD_EXTERNAL_MODELS" = "true" ]; then
+    DOWNLOAD_EXTRA_ARGS+=(--with-external-profiles)
+fi
+
+if [ -n "$DOWNLOAD_EXTERNAL_PROFILE_IDS" ]; then
+    DOWNLOAD_EXTRA_ARGS+=(--with-external-profiles)
+    DOWNLOAD_EXTRA_ARGS+=(--external-profile-ids "$DOWNLOAD_EXTERNAL_PROFILE_IDS")
+fi
+
+if [ "$DOWNLOAD_GERMAN_MARTIN" = "true" ]; then
+    DOWNLOAD_EXTRA_ARGS+=(--with-german-martin)
+fi
+
+if [ ${#DOWNLOAD_EXTRA_ARGS[@]} -gt 0 ]; then
+    echo "Downloading optional external profile assets..."
+    if ! python "$PROJECT_ROOT/docker/scripts/download_model.py" --output "$MODEL_DIR" "${DOWNLOAD_EXTRA_ARGS[@]}"; then
+        echo "Failed to download optional external assets" >&2
+        exit 1
+    fi
+fi
+
+echo "✓ Model asset preparation complete"
+exit 0

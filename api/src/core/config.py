@@ -1,7 +1,9 @@
+import json
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
 import torch
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -13,6 +15,24 @@ def _read_version() -> str:
         return _pkg_version("kokoro-fastapi")
     except PackageNotFoundError:
         return "0.0.0"
+
+
+class ExternalModelProfile(BaseModel):
+    """Config schema for optional externally hosted model profiles."""
+
+    enabled: bool = True
+    profile_id: str
+    model_repo_id: str
+    model_filename: str
+    model_subdir: str
+    model_ids: list[str] = Field(default_factory=list)
+    lang_codes: list[str] = Field(default_factory=list)
+    voice_files: dict[str, str] = Field(default_factory=dict)
+    voice_names: list[str] = Field(default_factory=list)
+    voice_aliases: dict[str, list[str]] = Field(default_factory=dict)
+    voice_repo_id: str | None = None
+    config_repo_id: str = "hexgrad/Kokoro-82M"
+    config_filename: str = "config.json"
 
 
 class Settings(BaseSettings):
@@ -41,6 +61,39 @@ class Settings(BaseSettings):
     # Container absolute paths
     model_dir: str = "/app/api/src/models"  # Absolute path in container
     voices_dir: str = "/app/api/src/voices/v1_0"  # Absolute path in container
+
+    # Dynamic asset loading
+    enable_german_martin_support: bool = True
+    auto_download_model_assets: bool = True
+
+    # Generic external model profiles (JSON via EXTERNAL_MODEL_PROFILES)
+    # Example value:
+    # [{
+    #   "profile_id": "kikiri-german-martin",
+    #   "model_repo_id": "kikiri-tts/kikiri-german-martin",
+    #   "model_filename": "kikiri_german_martin_ep10.pth",
+    #   "model_subdir": "kikiri_german_martin",
+    #   "model_ids": ["kikiri-german-martin"],
+    #   "lang_codes": ["de", "d"],
+    #   "voice_files": {"martin": "voices/martin.pt"},
+    #   "voice_aliases": {"martin": ["martin"]},
+    #   "config_repo_id": "hexgrad/Kokoro-82M",
+    #   "config_filename": "config.json"
+    # }]
+    external_model_profiles: list[ExternalModelProfile] = Field(
+        default_factory=list
+    )
+
+    # Legacy single-profile settings (still supported; mapped to one profile)
+    german_model_repo_id: str = "kikiri-tts/kikiri-german-martin"
+    german_model_filename: str = "kikiri_german_martin_ep10.pth"
+    german_model_subdir: str = "kikiri_german_martin"
+    german_voice_name: str = "martin"
+    german_voice_aliases: list[str] = ["martin"]
+    german_voice_filename_in_repo: str = "voices/martin.pt"
+    german_config_repo_id: str = "hexgrad/Kokoro-82M"
+    german_config_filename: str = "config.json"
+    german_model_ids: list[str] = ["kikiri-german-martin"]
 
     # Audio Settings
     sample_rate: int = 24000
@@ -79,6 +132,31 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+    @field_validator("external_model_profiles", mode="before")
+    @classmethod
+    def _coerce_external_model_profiles(cls, value):
+        if value in (None, ""):
+            return []
+
+        if isinstance(value, dict):
+            return [value]
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                return value
+
+            if isinstance(parsed, dict):
+                return [parsed]
+            return parsed
+
+        return value
 
     def get_device(self) -> str:
         """Get the appropriate device based on settings and availability"""

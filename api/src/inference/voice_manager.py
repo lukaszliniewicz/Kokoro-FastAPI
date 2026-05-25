@@ -8,6 +8,12 @@ from loguru import logger
 
 from ..core import paths
 from ..core.config import settings
+from ..core.model_assets import (
+    canonicalize_voice_name,
+    ensure_assets_for_request,
+    list_external_profile_voices,
+    resolve_pipeline_lang_code,
+)
 
 
 class VoiceManager:
@@ -51,11 +57,24 @@ class VoiceManager:
         Raises:
             RuntimeError: If voice not found
         """
+        canonical_voice_name = canonicalize_voice_name(voice_name)
+
         try:
-            voice_path = await self.get_voice_path(voice_name)
+            try:
+                voice_path = await self.get_voice_path(canonical_voice_name)
+            except FileNotFoundError:
+                await ensure_assets_for_request(
+                    voice_expression=canonical_voice_name,
+                    resolved_lang_code=resolve_pipeline_lang_code(
+                        canonical_voice_name, None
+                    ),
+                    requested_model=None,
+                )
+                voice_path = await self.get_voice_path(canonical_voice_name)
+
             target_device = device or self._device
             voice = await paths.load_voice_tensor(voice_path, target_device)
-            self._voices[voice_name] = voice
+            self._voices[canonical_voice_name] = voice
             return voice
         except Exception as e:
             raise RuntimeError(f"Failed to load voice {voice_name}: {e}")
@@ -93,7 +112,12 @@ class VoiceManager:
         Returns:
             List of voice names
         """
-        return await paths.list_voices()
+        voices = await paths.list_voices()
+
+        if settings.auto_download_model_assets:
+            voices.extend(list_external_profile_voices())
+
+        return sorted(set(voices))
 
     def cache_info(self) -> Dict[str, int]:
         """Get cache statistics.

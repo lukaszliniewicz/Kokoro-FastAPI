@@ -16,6 +16,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 
 from ..core.config import settings
+from ..core.model_assets import (
+    canonicalize_voice_name,
+    get_external_profile_model_mappings,
+)
 from ..inference.base import AudioChunk
 from ..services.audio import AudioService
 from ..services.streaming_audio_writer import StreamingAudioWriter
@@ -31,10 +35,21 @@ def load_openai_mappings() -> Dict:
     mapping_path = os.path.join(api_dir, "core", "openai_mappings.json")
     try:
         with open(mapping_path, "r") as f:
-            return json.load(f)
+            mappings = json.load(f)
     except Exception as e:
         logger.error(f"Failed to load OpenAI mappings: {e}")
         return {"models": {}, "voices": {}}
+
+    mappings.setdefault("models", {})
+    mappings.setdefault("voices", {})
+
+    try:
+        for model_id, internal_name in get_external_profile_model_mappings().items():
+            mappings["models"].setdefault(model_id, internal_name)
+    except Exception as e:
+        logger.warning(f"Failed to merge external profile model mappings: {e}")
+
+    return mappings
 
 
 # Global mappings
@@ -121,6 +136,7 @@ async def process_and_validate_voices(
         mapped_voice[0] = _openai_mappings["voices"].get(
             mapped_voice[0], mapped_voice[0]
         )
+        mapped_voice[0] = canonicalize_voice_name(mapped_voice[0])
 
         if mapped_voice[0] not in available_voices:
             raise ValueError(
@@ -149,6 +165,7 @@ async def stream_audio_chunks(
             text=request.input,
             voice=voice_name,
             writer=writer,
+            model=request.model,
             speed=request.speed,
             output_format=request.response_format,
             lang_code=request.lang_code,
@@ -300,6 +317,7 @@ async def create_speech(
                 text=request.input,
                 voice=voice_name,
                 writer=writer,
+                model=request.model,
                 speed=request.speed,
                 volume_multiplier=request.volume_multiplier,
                 normalization_options=request.normalization_options,
@@ -451,32 +469,14 @@ async def download_audio_file(filename: str):
 async def list_models():
     """List all available models"""
     try:
-        # Create standard model list
         models = [
             {
-                "id": "tts-1",
+                "id": model_id,
                 "object": "model",
                 "created": 1686935002,
                 "owned_by": "kokoro",
-            },
-            {
-                "id": "tts-1-hd",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
-            {
-                "id": "kokoro",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
-            {
-                "id": "gpt-4o-mini-tts",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
+            }
+            for model_id in sorted(_openai_mappings["models"].keys())
         ]
 
         return {"object": "list", "data": models}
@@ -496,30 +496,7 @@ async def list_models():
 async def retrieve_model(model: str):
     """Retrieve a specific model"""
     try:
-        # Define available models
-        models = {
-            "tts-1": {
-                "id": "tts-1",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
-            "tts-1-hd": {
-                "id": "tts-1-hd",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
-            "kokoro": {
-                "id": "kokoro",
-                "object": "model",
-                "created": 1686935002,
-                "owned_by": "kokoro",
-            },
-        }
-
-        # Check if requested model exists
-        if model not in models:
+        if model not in _openai_mappings["models"]:
             raise HTTPException(
                 status_code=404,
                 detail={
@@ -529,8 +506,12 @@ async def retrieve_model(model: str):
                 },
             )
 
-        # Return the specific model
-        return models[model]
+        return {
+            "id": model,
+            "object": "model",
+            "created": 1686935002,
+            "owned_by": "kokoro",
+        }
     except HTTPException:
         raise
     except Exception as e:
