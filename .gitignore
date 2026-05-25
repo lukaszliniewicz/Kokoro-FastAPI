@@ -16,10 +16,6 @@ __pycache__/
 # Python package build artifacts
 *.egg-info/
 *.egg
-dist/
-build/
-*.onnx
-*.pth
 # Environment
 # .env
 .venv/
@@ -38,7 +34,9 @@ ENV/
 
 *.pth
 *.tar*
-
+api/src/models/kikiri_german_martin/
+api/src/voices/v1_0/martin.pt
+.hf-cache/
 
 # Other project files
 .env
